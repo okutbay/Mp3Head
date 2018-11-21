@@ -1,0 +1,8 @@
+﻿Uygulama yardımı
+/? bu yardımı gösterir
+-s { youtube video key} ile tek dosya indirme
+-b { text source file} içindeki youtube video key listesinin toplu olarak indirilmesi.
+-t { hedef klasor} indirilenleri varsayılan hedef "c:\MP3Downloads\" klasörüden farklı bir yere kaydetme
+
+
+Çıkmak için enter tuşuna basınız!
