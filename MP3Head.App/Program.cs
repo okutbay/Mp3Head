@@ -56,57 +56,87 @@ namespace MP3Head.App
         /// -t "{hedef klasor}" indirilenleri varsayılan hedef "c:\MP3Downloads\" klasörüden farklı bir yere kaydetme
         /// </summary>
         /// <param name="args"></param>
-        static void Main(string[] args)
+        static void Main(string[] args) //CommandLineToArgvW for more information
         {
+            string targetFolder = string.Empty;
+            targetFolder = DefaultTargetFolder;
+
             Result invalidArgumentsResult = CheckInvalidArguments(args);
             bool hasInvalidArguments = invalidArgumentsResult.HasError;
-            string targetFolder = string.Empty;
 
             if (args == null || args.Length == 0 || hasInvalidArguments)
             {
                 //throw new ArgumentNullException(nameof(args));
                 DisplayResult(invalidArgumentsResult);
+                Environment.Exit(-1);
+            }
+
+            Result setSwitchResult = SetSwitchValues(args);
+
+            if (setSwitchResult.HasError)
+            {
+                DisplayResult(setSwitchResult);
+                Environment.Exit(-2);
+            }
+
+            if (IsHelpSwitchSet)
+            {
+                DisplayHelp();
+                Environment.Exit(0);
+            }
+
+            if (IsTargetSwitchSet && !(IsSingleSwitchSet || IsBulkSwitchSet))
+            {
+                Result myResult = new Result();
+                myResult.HasError = true;
+                myResult.Descriprion = $"Yeni Hedef klasör anahtarı diğer anahtarlar olmadan kullanılamaz. \r\n";
+                DisplayResult(myResult);
+                Environment.Exit(-3);
+            }
+
+            if (IsTargetSwitchSet)
+            {
+                targetFolder = SetTargetFolder();
             }
             else
             {
-                Result setSwitchResult = SetSwitchValues(args);
+                CheckDefaultTargetFolder();
+            }
 
-                if (setSwitchResult.HasError)
-                {
-                    DisplayResult(setSwitchResult);
-                }
-                else
-                {
-                    if (IsHelpSwitchSet)
-                    {
-                        DisplayHelp();
-                    }
-                    else
-                    {
-                        if (IsTargetSwitchSet)
-                        {
-                            targetFolder = SetTargetFolder();
-                        }
+            if (IsSingleSwitchSet)
+            {
+                Console.WriteLine($"İndirme başladı: {VideoKey}\r\n");
+                string fileName = string.Empty;
+                DownloadMusic(VideoKey, targetFolder, out fileName);
+                Console.WriteLine($"İndirme tamamlandı! {fileName} dosyası {targetFolder} altına kaydedildi\r\n");
+            }
 
-                        if (IsSingleSwitchSet)
-                        {
-                            Console.WriteLine($"İndirme başladı: {VideoKey}\r\n");
-                            string fileName = string.Empty;
-                            DownloadMusic(VideoKey, targetFolder, out fileName);
-                            Console.WriteLine($"İndirme tamamlandı! {fileName} dosyası {targetFolder} altına kaydedildi\r\n");
-                        }
+            if (IsBulkSwitchSet)
+            {
+                DownloadBulkMusic(VideoKeySourceFileName, targetFolder);
+            }
 
-                        if (IsBulkSwitchSet)
-                        {
-                            Console.WriteLine($"Toplu İndirme başladı: {VideoKeySourceFileName}\r\n");
-                            DownloadBulkMusic(VideoKeySourceFileName, targetFolder);
-                            Console.WriteLine($"Toplu İndirme tamamlandı: {VideoKeySourceFileName}\r\n");
-                        }
+            Console.WriteLine("Çıkmak için enter tuşuna basınız!\r\n");
+            Console.ReadLine();
+        }
 
-                        Console.WriteLine("Çıkmak için enter tuşuna basınız!\r\n");
-                        Console.ReadLine();
-                    }
-                }
+        private static void CheckDefaultTargetFolder()
+        {
+            Console.Write($"Varsayılan Hedef klasör '{DefaultTargetFolder}' kontrol ediliyor");
+
+            if (!Directory.Exists(DefaultTargetFolder))
+            {
+                Directory.CreateDirectory(DefaultTargetFolder);
+                Result myResult = new Result();
+                myResult.HasError = true;
+                myResult.Descriprion = $"Varsayılan Hedef klasör '{DefaultTargetFolder}' bulunamadı, oluşturuluyor. \r\n ";
+                //DisplayResult(myResult);
+
+                Console.WriteLine(myResult.Descriprion);
+            }
+            else
+            {
+                Console.Write("[OK]\r\n");
             }
         }
 
@@ -124,6 +154,15 @@ namespace MP3Head.App
                 if (string.IsNullOrEmpty(trailingSlash) || trailingSlash != @"\")
                 {
                     targetFolder += @"\";
+                }
+
+                if (!Directory.Exists(targetFolder))
+                {
+                    Result myResult = new Result();
+                    myResult.HasError = true;
+                    myResult.Descriprion = $"Hedef klasör '{targetFolder}' bulunamadı, varsayılan klasör kullanılacak '{DefaultTargetFolder}'  \r\n ";
+                    DisplayResult(myResult, false);
+                    targetFolder = DefaultTargetFolder;
                 }
             }
 
@@ -174,17 +213,32 @@ namespace MP3Head.App
                 myResult.Descriprion = "A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond ---> System.Net.Sockets.SocketException: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond";
                 DisplayResult(myResult);
             }
-
-
         }
 
         static void DownloadBulkMusic(string VideoKeySourceFileName, string TargetFolder)
         {
+            Console.WriteLine($"Toplu İndirme başladı: {VideoKeySourceFileName}\r\n");
+
             List<string> keysToDownload = new List<string>();
             string[] lines;
+            string path;
 
-            
-            bool fileExists = System.IO.File.Exists(@VideoKeySourceFileName);
+            //determine if file name contains folder informatin
+            string directoryName = Path.GetDirectoryName(VideoKeySourceFileName);
+            if (string.IsNullOrEmpty(directoryName)) //no path
+            {
+                string currentDirectory = System.IO.Directory.GetCurrentDirectory();
+                path = Path.Combine(currentDirectory, VideoKeySourceFileName);
+                Console.WriteLine($"Toplu indirme dosyası uygulama klasöründen kullanılıyor.");
+            }
+            else
+            {
+                path = VideoKeySourceFileName;
+            }
+
+            Console.WriteLine($"Toplu indirme dosyası tam yolu: {path}");
+
+            bool fileExists = System.IO.File.Exists(@path);
 
             if (fileExists)
             {
@@ -192,7 +246,7 @@ namespace MP3Head.App
             }
             else
             {
-                Console.WriteLine($"Toplu indirme dosyası bulunamadı\r\n");
+                Console.WriteLine($"Toplu indirme dosyası bulunamadı {path}");
                 return;
             }
 
@@ -207,18 +261,48 @@ namespace MP3Head.App
 
             int fileCount = 0;
             fileCount = keysToDownload.Count;
-            Console.WriteLine($"Toplu indirme dosyası içindeki dosya sayısı: {fileCount} adet.\r\n");
 
-            //downlload keys
+            if (fileCount == 0)
+            {
+                Console.Write($"İndirilecek dosya yok. İndirme işlemi durduruldu. \r\n");
+                return;
+            }
+
+            Console.WriteLine($"Toplu indirme dosyası içindeki dosya sayısı: {fileCount} adet.");
+            Console.WriteLine($"İndirme hedef klasörü: {TargetFolder}");
+            Console.Write($"İndirme işlemine devam edilsin mi? [E/H]");
+            
+            ConsoleKey key;// = keyInfo.Key;
+
+            do
+            {
+                key = Console.ReadKey(true).Key;   // true is intercept key (dont show), false is show
+                Console.WriteLine("");
+                if (key != ConsoleKey.E && key != ConsoleKey.H)
+                {
+                    Console.Write("Geçersiz cevap, Lütfen Evet için E, Hayır için H tuşlayınız");
+                }
+            } while (key != ConsoleKey.E && key != ConsoleKey.H);
+
+
+            if (key == ConsoleKey.H || key == ConsoleKey.N)
+            {
+                Console.Write($"İndirme işlemi durduruldu. \r\n");
+                return;
+            }
+
+            //download keys
             foreach (var videoKey in keysToDownload)
             {
                 string targetFolder = TargetFolder;
                 string fileName = string.Empty;
 
-                Console.WriteLine($"İndirme başladı: {videoKey}\r\n");
+                Console.WriteLine($"İndirme başladı: {videoKey}");
                 DownloadMusic(videoKey, targetFolder, out fileName);
-                Console.WriteLine($"İndirme tamamlandı! {fileName} dosyası {targetFolder} altına kaydedildi\r\n");
+                Console.WriteLine($"İndirme tamamlandı! {fileName} dosyası {targetFolder} altına kaydedildi");
             }
+
+            Console.WriteLine($"Toplu İndirme tamamlandı: {VideoKeySourceFileName}\r\n");
         }
 
         static Result CheckInvalidArguments(string[] args)
@@ -236,7 +320,9 @@ namespace MP3Head.App
                 {
                     string argument = args[i];
 
-                    if (argument.Length <= 2 && argument.Length > 0) //if argument's length is 1 or 2 it's a switch
+                    bool isEven = i % 2 == 0;//used to determine the argument is a switch argument or not
+
+                    if (isEven && argument.Length <= 2 && argument.Length > 0) //if argument's length is 1 or 2 it's a switch
                     {
                         bool isItemValid = false;
                         isItemValid = validSwitches.Contains(argument);
@@ -258,7 +344,7 @@ namespace MP3Head.App
                 {
                     message = $"Geçerli olmayan anahtar(lar) algılandı. Hatalı anahtarlar: {invalidSwitches}\r\n";
                 }
-                
+
                 myResult = new Result();
                 myResult.HasError = hasInvalidSwitches;
                 myResult.Descriprion = message;
@@ -304,7 +390,7 @@ namespace MP3Head.App
 
                             //claim switch related parameter value
                             int nextIndex = i + 1;
-                            if (nextIndex < args.Length && args[nextIndex]!=null && args[nextIndex].Length > 2)
+                            if (nextIndex < args.Length && args[nextIndex] != null && args[nextIndex].Length > 2)
                             {
                                 VideoKey = args[nextIndex];
                             }
@@ -348,7 +434,7 @@ namespace MP3Head.App
                             {
                                 hasMissingValue = true;
                                 IsTargetSwitchSet = false;
-                                errors += "-t için parametre değeri yok ya da eksik\r\n";
+                                errors += "-t için parametre değeri yok ya da eksik. Geçerli bir klasör yazınız. \r\n";
                             }
                         }
                     }
@@ -374,28 +460,30 @@ namespace MP3Head.App
                 myResult = new Result();
                 myResult.HasError = true;
             }
-            
+
             return myResult;
         }
 
-        static void DisplayResult(Result ResultToDisplay)
+        static void DisplayResult(Result ResultToDisplay, bool ShowHelp = true)
         {
             Console.WriteLine(ResultToDisplay.Descriprion);
-            DisplayHelp();
+
+            if (ShowHelp)
+            {
+                DisplayHelp();
+            }
         }
 
         static void DisplayHelp()
         {
             Console.WriteLine("Uygulama yardımı");
-            
             Console.WriteLine("/? bu yardımı gösterir");
-            Console.WriteLine("-s { youtube video key} ile tek dosya indirme");
-            Console.WriteLine("-b { text source file} içindeki youtube video key listesinin toplu olarak indirilmesi.");
-            Console.WriteLine("-t { hedef klasor} indirilenleri varsayılan hedef \"c:\\MP3Downloads\\\" klasörüden farklı bir yere kaydetme");
-            Console.WriteLine("");
+            Console.WriteLine("-s {youtube video key} ile tek dosya indirme");
+            Console.WriteLine("-b {text source file} içindeki youtube video key listesinin toplu olarak indirilmesi. (Klasör belirtilmezse dosya uygulama klasöründe aranır.)");
+            Console.WriteLine("-t {hedef klasor} indirilenleri varsayılan hedef \"c:\\MP3Downloads\\\" klasörüden farklı bir yere kaydetme. (Tek başına kullanılmaz. -s ya da -b anahtarları ile birlikte kullanılmalıdır.)");
             Console.WriteLine("");
             Console.WriteLine("Çıkmak için enter tuşuna basınız!");
-            charArt();
+            //charArt();
             Console.ReadLine();
         }
 
